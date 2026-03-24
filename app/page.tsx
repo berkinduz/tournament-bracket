@@ -467,7 +467,7 @@ export default function HomePage() {
 
       {/* QR code */}
       {selectedTournament.status !== "setup" && (
-        <div className="fixed bottom-4 right-4 z-30 bg-white rounded-2xl shadow-xl border border-border-subtle p-3">
+        <div className="hidden md:block fixed bottom-4 right-4 z-30 bg-white rounded-2xl shadow-xl border border-border-subtle p-3">
           <QRCodeSVG
             value={typeof window !== "undefined"
               ? `${window.location.origin}/t/${selectedTournament.id}`

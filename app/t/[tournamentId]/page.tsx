@@ -120,7 +120,7 @@ export default function PublicBracketPage({
 
       {/* QR code — always visible bottom-right */}
       {pageUrl && (
-        <div className="fixed bottom-4 right-4 z-50 bg-white rounded-2xl shadow-xl border border-border-subtle p-3">
+        <div className="hidden md:block fixed bottom-4 right-4 z-50 bg-white rounded-2xl shadow-xl border border-border-subtle p-3">
           <QRCodeSVG value={pageUrl} size={140} level="M" />
           <p className="text-[10px] text-text-muted text-center mt-1.5 font-mono">Scan to follow live</p>
         </div>
