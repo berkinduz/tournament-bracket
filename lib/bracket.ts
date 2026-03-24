@@ -3,7 +3,6 @@ import type { Player } from "./types";
 /**
  * Single-elimination bracket with power-of-2 sizing.
  * Byes in round 0 for non-power-of-2 player counts.
- * No seeding — random placement.
  */
 
 interface GeneratedMatch {
@@ -16,6 +15,11 @@ interface GeneratedMatch {
   status: "pending" | "active" | "completed";
 }
 
+interface Slot {
+  playerId: string | null;
+  isBye: boolean;
+}
+
 export function nextPowerOf2(n: number): number {
   let p = 1;
   while (p < n) p *= 2;
@@ -26,7 +30,6 @@ export function totalRounds(bracketSize: number): number {
   return Math.log2(bracketSize);
 }
 
-/** Convenience: total rounds for N players */
 export function calcTotalRounds(n: number): number {
   if (n < 2) return 0;
   return totalRounds(nextPowerOf2(n));
@@ -42,49 +45,29 @@ function shuffleArray<T>(array: T[]): T[] {
 }
 
 /**
- * Generate bracket. Random placement, byes in round 0.
- * Byes distributed evenly: even-indexed pairs first, then odd.
+ * Distribute bye positions evenly across the bracket.
+ * Round 2 groups = pairs of R0 pairs: (0,1), (2,3), ...
+ * Rule: max 1 bye per group first, then fill second slots.
  */
-export function generateBracket(players: Player[]): GeneratedMatch[] {
-  const n = players.length;
-  if (n < 2) throw new Error("Need at least 2 players");
-
-  const bracketSize = nextPowerOf2(n);
-  const numByes = bracketSize - n;
-  const numRounds = totalRounds(bracketSize);
-  const numPairs = bracketSize / 2;
-
-  const shuffled = shuffleArray(players);
-
-  // Distribute byes evenly so no two bye players meet in Round 2.
-  // Round 2 groups = pairs of R0 pairs: (0,1), (2,3), (4,5), ...
-  // Rule: max 1 bye per group first, then fill second slots if needed.
+function distributeByes(numPairs: number, numByes: number): Set<number> {
   const byePairSet = new Set<number>();
   const numGroups = numPairs / 2;
-
-  // Pass 1: first slot of each group (pair 0, 2, 4, 6, ...)
   for (let g = 0; g < numGroups && byePairSet.size < numByes; g++) {
     byePairSet.add(g * 2);
   }
-  // Pass 2: second slot of each group (pair 1, 3, 5, 7, ...)
   for (let g = 0; g < numGroups && byePairSet.size < numByes; g++) {
     byePairSet.add(g * 2 + 1);
   }
+  return byePairSet;
+}
 
-  // Build slots
-  const slots: Array<{ playerId: string | null; isBye: boolean }> = Array.from(
-    { length: bracketSize }, () => ({ playerId: null, isBye: false })
-  );
-  for (const p of byePairSet) slots[p * 2 + 1].isBye = true;
-
-  // Place players into non-bye slots
-  let pi = 0;
-  for (let i = 0; i < bracketSize; i++) {
-    if (!slots[i].isBye && pi < shuffled.length) {
-      slots[i].playerId = shuffled[pi++].id;
-    }
-  }
-
+/**
+ * Build all matches from a pre-built slot array.
+ * Shared by both auto and manual generation.
+ */
+function buildMatchesFromSlots(slots: Slot[], bracketSize: number): GeneratedMatch[] {
+  const numRounds = totalRounds(bracketSize);
+  const numPairs = bracketSize / 2;
   const allMatches: GeneratedMatch[] = [];
 
   // Round 0
@@ -129,12 +112,110 @@ export function generateBracket(players: Player[]): GeneratedMatch[] {
     }
   }
 
-  // Advance real round-0 match results (if both are set, mark active)
+  // Mark real round-0 matches with both players as active
   for (const m of r0) {
     if (!m.isBye && m.player1Id && m.player2Id) m.status = "active";
   }
 
   return allMatches;
+}
+
+/**
+ * Generate bracket with random placement.
+ */
+export function generateBracket(players: Player[]): GeneratedMatch[] {
+  const n = players.length;
+  if (n < 2) throw new Error("Need at least 2 players");
+
+  const bracketSize = nextPowerOf2(n);
+  const numByes = bracketSize - n;
+  const numPairs = bracketSize / 2;
+
+  const shuffled = shuffleArray(players);
+  const byePairSet = distributeByes(numPairs, numByes);
+
+  // Build slots
+  const slots: Slot[] = Array.from({ length: bracketSize }, () => ({ playerId: null, isBye: false }));
+  for (const p of byePairSet) slots[p * 2 + 1].isBye = true;
+
+  // Place players into non-bye slots
+  let pi = 0;
+  for (let i = 0; i < bracketSize; i++) {
+    if (!slots[i].isBye && pi < shuffled.length) {
+      slots[i].playerId = shuffled[pi++].id;
+    }
+  }
+
+  return buildMatchesFromSlots(slots, bracketSize);
+}
+
+/**
+ * Generate bracket from explicit pairings.
+ * pairings: array of [player1Id, player2Id] for each real match.
+ * Remaining players get auto-distributed byes.
+ */
+export function generateBracketFromPairings(
+  players: Player[],
+  pairings: [string, string][]
+): GeneratedMatch[] {
+  const n = players.length;
+  if (n < 2) throw new Error("Need at least 2 players");
+
+  const bracketSize = nextPowerOf2(n);
+  const numByes = bracketSize - n;
+  const numPairs = bracketSize / 2;
+  const expectedRealMatches = numPairs - numByes;
+
+  if (pairings.length !== expectedRealMatches) {
+    throw new Error(`Expected ${expectedRealMatches} pairings, got ${pairings.length}`);
+  }
+
+  // Validate player IDs
+  const playerIds = new Set(players.map(p => p.id));
+  const usedIds = new Set<string>();
+  for (const [a, b] of pairings) {
+    if (!playerIds.has(a) || !playerIds.has(b)) throw new Error("Invalid player ID in pairings");
+    if (usedIds.has(a) || usedIds.has(b)) throw new Error("Duplicate player in pairings");
+    if (a === b) throw new Error("Player cannot play against themselves");
+    usedIds.add(a);
+    usedIds.add(b);
+  }
+
+  // Players not in pairings get byes
+  const byePlayers = players.filter(p => !usedIds.has(p.id));
+  const byePairSet = distributeByes(numPairs, numByes);
+
+  // Build slots
+  const slots: Slot[] = Array.from({ length: bracketSize }, () => ({ playerId: null, isBye: false }));
+  for (const p of byePairSet) slots[p * 2 + 1].isBye = true;
+
+  // Place paired players into non-bye pair positions
+  let pairingIdx = 0;
+  for (let pos = 0; pos < numPairs; pos++) {
+    if (!byePairSet.has(pos)) {
+      slots[pos * 2].playerId = pairings[pairingIdx][0];
+      slots[pos * 2 + 1].playerId = pairings[pairingIdx][1];
+      pairingIdx++;
+    }
+  }
+
+  // Place bye players into bye pair positions
+  let byeIdx = 0;
+  for (let pos = 0; pos < numPairs; pos++) {
+    if (byePairSet.has(pos) && byeIdx < byePlayers.length) {
+      slots[pos * 2].playerId = byePlayers[byeIdx++].id;
+    }
+  }
+
+  return buildMatchesFromSlots(slots, bracketSize);
+}
+
+/** How many real (non-bye) matches will be in Round 0? */
+export function calcRealMatchCount(playerCount: number): number {
+  if (playerCount < 2) return 0;
+  const bracketSize = nextPowerOf2(playerCount);
+  const numByes = bracketSize - playerCount;
+  return bracketSize / 2 - numByes;
 }
 
 export function getNextMatchSlot(round: number, position: number) {

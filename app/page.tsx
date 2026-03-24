@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { adminFetch } from "@/lib/admin-fetch";
 import PlayerManager from "@/app/components/PlayerManager";
+import ManualPairing from "@/app/components/ManualPairing";
 import ScoreModal from "@/app/components/ScoreModal";
 import BracketView from "@/app/components/BracketView";
 import { QRCodeSVG } from "qrcode.react";
@@ -30,6 +31,8 @@ export default function HomePage() {
   // New tournament
   const [newName, setNewName] = useState("");
   const [showCreate, setShowCreate] = useState(false);
+  const [bracketMode, setBracketMode] = useState<"auto" | "manual">("auto");
+  const [manualPairings, setManualPairings] = useState<[string, string][] | null>(null);
 
   // Check sessionStorage on mount
   useEffect(() => {
@@ -116,7 +119,14 @@ export default function HomePage() {
   const generateBracket = async () => {
     if (!selectedTournament) return;
     setLoading(true);
-    await adminFetch(`/api/tournaments/${selectedTournament.id}/generate`, { method: "POST" });
+    const body: Record<string, unknown> = { mode: bracketMode };
+    if (bracketMode === "manual" && manualPairings) {
+      body.pairings = manualPairings;
+    }
+    await adminFetch(`/api/tournaments/${selectedTournament.id}/generate`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
     const tRes = await fetch(`/api/tournaments/${selectedTournament.id}`);
     const tData = await tRes.json();
     setSelectedTournament(tData);
@@ -401,7 +411,8 @@ export default function HomePage() {
                 <span className="text-amber-600 font-bold text-sm">🏆 {selectedTournament.champion}</span>
               )}
               {selectedTournament.status === "setup" && players.length >= 2 && (
-                <button onClick={generateBracket} disabled={loading}
+                <button onClick={generateBracket}
+                  disabled={loading || (bracketMode === "manual" && !manualPairings)}
                   className="px-5 py-2 bg-[#111] text-white font-semibold rounded-lg
                              hover:bg-[#333] disabled:opacity-50 transition-colors">
                   Generate Bracket →
@@ -420,13 +431,44 @@ export default function HomePage() {
 
         {/* Setup phase — admin only */}
         {isAdmin && selectedTournament.status === "setup" && (
-          <div className="card p-4">
-            <PlayerManager
-              tournamentId={selectedTournament.id}
-              players={players}
-              onPlayersChange={() => loadPlayers(selectedTournament.id)}
-            />
-          </div>
+          <>
+            <div className="card p-4">
+              <PlayerManager
+                tournamentId={selectedTournament.id}
+                players={players}
+                onPlayersChange={() => loadPlayers(selectedTournament.id)}
+              />
+            </div>
+
+            {/* Bracket mode toggle + manual pairing */}
+            {players.length >= 2 && (
+              <div className="card p-4 space-y-4">
+                <div className="flex items-center gap-1 p-1 bg-bg-primary rounded-lg w-fit">
+                  <button
+                    onClick={() => { setBracketMode("auto"); setManualPairings(null); }}
+                    className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors
+                      ${bracketMode === "auto" ? "bg-white shadow-sm text-text-primary" : "text-text-muted hover:text-text-secondary"}`}
+                  >
+                    Auto Shuffle
+                  </button>
+                  <button
+                    onClick={() => setBracketMode("manual")}
+                    className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors
+                      ${bracketMode === "manual" ? "bg-white shadow-sm text-text-primary" : "text-text-muted hover:text-text-secondary"}`}
+                  >
+                    Manual Bracket
+                  </button>
+                </div>
+
+                {bracketMode === "manual" && (
+                  <ManualPairing
+                    players={players}
+                    onPairingsChange={setManualPairings}
+                  />
+                )}
+              </div>
+            )}
+          </>
         )}
 
         {/* Viewer sees "setting up" message */}

@@ -1,14 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
-import { generateBracket } from "@/lib/bracket";
+import { generateBracket, generateBracketFromPairings } from "@/lib/bracket";
 import type { Player } from "@/lib/types";
 
 // POST /api/tournaments/[id]/generate — generate bracket
 export async function POST(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+
+  // Parse optional body
+  const body = await request.json().catch(() => ({ mode: "auto" as const })) as {
+    mode?: "auto" | "manual";
+    pairings?: [string, string][];
+  };
+  const mode = body.mode ?? "auto";
+
   const supabase = createServiceClient();
 
   // Get tournament
@@ -19,17 +27,11 @@ export async function POST(
     .single();
 
   if (tError || !tournament) {
-    return NextResponse.json(
-      { error: "Tournament not found" },
-      { status: 404 }
-    );
+    return NextResponse.json({ error: "Tournament not found" }, { status: 404 });
   }
 
   if (tournament.status !== "setup") {
-    return NextResponse.json(
-      { error: "Tournament is already active or completed" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "Tournament is already active or completed" }, { status: 400 });
   }
 
   // Get players
@@ -43,17 +45,23 @@ export async function POST(
   }
 
   if (!players || players.length < 2) {
-    return NextResponse.json(
-      { error: "Need at least 2 players" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "Need at least 2 players" }, { status: 400 });
   }
 
-  // Delete any existing matches (in case of re-generation)
+  // Delete any existing matches
   await supabase.from("matches").delete().eq("tournament_id", id);
 
-  // Generate bracket
-  const generatedMatches = generateBracket(players as Player[]);
+  // Generate bracket based on mode
+  let generatedMatches;
+  try {
+    if (mode === "manual" && body.pairings) {
+      generatedMatches = generateBracketFromPairings(players as Player[], body.pairings);
+    } else {
+      generatedMatches = generateBracket(players as Player[]);
+    }
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : "Bracket generation failed" }, { status: 400 });
+  }
 
   // Insert matches
   const matchInserts = generatedMatches.map((m) => ({
@@ -69,19 +77,13 @@ export async function POST(
     status: m.status,
   }));
 
-  const { error: mError } = await supabase
-    .from("matches")
-    .insert(matchInserts);
+  const { error: mError } = await supabase.from("matches").insert(matchInserts);
 
   if (mError) {
     return NextResponse.json({ error: mError.message }, { status: 500 });
   }
 
-  // Update tournament status to active
-  await supabase
-    .from("tournaments")
-    .update({ status: "active" })
-    .eq("id", id);
+  await supabase.from("tournaments").update({ status: "active" }).eq("id", id);
 
   return NextResponse.json({ success: true, matchCount: matchInserts.length });
 }
