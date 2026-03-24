@@ -99,6 +99,33 @@ export async function POST(
     .single();
   if (mErr || !match) return NextResponse.json({ error: "Match not found" }, { status: 404 });
 
+  // Validate match belongs to this tournament
+  if (match.tournament_id !== id) {
+    return NextResponse.json({ error: "Match does not belong to this tournament" }, { status: 400 });
+  }
+
+  // Validate match is active (or completed for re-scoring)
+  if (match.status !== "active" && match.status !== "completed") {
+    return NextResponse.json({ error: "Match is not active" }, { status: 400 });
+  }
+
+  // Validate winner_id is one of the players
+  if (body.winner_id !== match.player1_id && body.winner_id !== match.player2_id) {
+    return NextResponse.json({ error: "Winner must be one of the match players" }, { status: 400 });
+  }
+
+  // Validate scores are non-negative and winner has higher score
+  if (body.player1_score < 0 || body.player2_score < 0) {
+    return NextResponse.json({ error: "Scores must be non-negative" }, { status: 400 });
+  }
+  if (body.player1_score === body.player2_score) {
+    return NextResponse.json({ error: "Scores cannot be tied" }, { status: 400 });
+  }
+  const expectedWinner = body.player1_score > body.player2_score ? match.player1_id : match.player2_id;
+  if (body.winner_id !== expectedWinner) {
+    return NextResponse.json({ error: "Winner must have the higher score" }, { status: 400 });
+  }
+
   // Count players to determine total rounds
   const { data: allPlayers } = await supabase
     .from("players")
