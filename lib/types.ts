@@ -1,3 +1,5 @@
+export type SportType = "ping-pong" | "foosball" | "chess" | "other";
+
 export interface Tournament {
   id: string;
   name: string;
@@ -5,6 +7,7 @@ export interface Tournament {
   best_of: 3 | 5;
   status: "setup" | "active" | "completed";
   champion: string | null;
+  sport_type?: SportType;
 }
 
 export interface Player {

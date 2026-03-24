@@ -7,13 +7,21 @@ export async function GET() {
   const supabase = createServiceClient();
   const { data, error } = await supabase
     .from("tournaments")
-    .select("*")
+    .select("*, players(count)")
     .order("created_at", { ascending: false });
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
-  return NextResponse.json(data);
+
+  // Flatten player count
+  const result = (data || []).map((t) => ({
+    ...t,
+    player_count: (t.players as unknown as { count: number }[])?.[0]?.count ?? 0,
+    players: undefined,
+  }));
+
+  return NextResponse.json(result);
 }
 
 // POST /api/tournaments — create a new tournament
@@ -21,6 +29,7 @@ export async function POST(request: NextRequest) {
   const body = await request.json() as {
     name: string;
     best_of: BestOf;
+    sport_type?: string;
   };
 
   if (!body.name?.trim()) {
@@ -33,14 +42,19 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const insertData: Record<string, unknown> = {
+    name: body.name.trim(),
+    best_of: body.best_of,
+    status: "setup",
+  };
+  if (body.sport_type) {
+    insertData.sport_type = body.sport_type;
+  }
+
   const supabase = createServiceClient();
   const { data, error } = await supabase
     .from("tournaments")
-    .insert({
-      name: body.name.trim(),
-      best_of: body.best_of,
-      status: "setup",
-    })
+    .insert(insertData)
     .select()
     .single();
 
