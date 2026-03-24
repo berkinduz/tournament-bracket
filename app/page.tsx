@@ -153,11 +153,12 @@ export default function AdminPage() {
 
   return (
     <div className="min-h-screen bg-bg-primary">
-      {/* Header — not sticky */}
-      <header className="bg-bg-secondary border-b border-border-subtle shadow-sm">
-        <div className="px-4 py-3 flex items-center gap-3">
-          <span className="text-2xl">🏓</span>
-          <h1 className="text-lg font-bold font-display text-text-primary">Ping Pong Tournament</h1>
+      {/* Header */}
+      <header className="bg-[#111] border-b border-[#333]">
+        <div className="px-5 py-3 flex items-center gap-4">
+          <img src="/epam.png" alt="EPAM" className="h-5 invert brightness-200" />
+          <div className="w-px h-5 bg-[#444]" />
+          <h1 className="text-sm font-semibold text-white tracking-wide">Ping Pong Tournament</h1>
         </div>
       </header>
 

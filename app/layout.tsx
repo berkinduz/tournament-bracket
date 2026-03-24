@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Ping Pong Tournament",
-  description: "Live single-elimination ping pong tournament bracket",
+  title: "EPAM Ping Pong Tournament",
+  description: "EPAM office ping pong tournament bracket — live results",
 };
 
 export default function RootLayout({

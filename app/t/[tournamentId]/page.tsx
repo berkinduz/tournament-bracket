@@ -64,7 +64,7 @@ export default function PublicBracketPage({
     return (
       <div className="min-h-screen flex items-center justify-center bg-bg-primary">
         <div className="card p-8 text-center max-w-md">
-          <div className="text-4xl mb-4">🏓</div>
+          <img src="/epam.png" alt="EPAM" className="h-6 mx-auto mb-4 opacity-40" />
           <h1 className="text-2xl font-bold mb-2">{tournament.name}</h1>
           <p className="text-text-secondary">Bracket will appear here when ready.</p>
         </div>
@@ -75,17 +75,21 @@ export default function PublicBracketPage({
   return (
     <div className="min-h-screen bg-bg-primary">
       {/* Header */}
-      <header className="bg-bg-secondary border-b border-border-subtle sticky top-0 z-40 shadow-sm">
-        <div className="px-4 py-3 flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-bold font-display">{tournament.name}</h1>
-            <p className="text-xs text-text-secondary font-mono">
-              Bo{tournament.best_of} — {completedCount}/{totalPlayableCount} matches
-            </p>
+      <header className="bg-[#111] border-b border-[#333] sticky top-0 z-40">
+        <div className="px-5 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <img src="/epam.png" alt="EPAM" className="h-4 invert brightness-200" />
+            <div className="w-px h-4 bg-[#444]" />
+            <div>
+              <h1 className="text-sm font-semibold text-white">{tournament.name}</h1>
+              <p className="text-[10px] text-gray-400 font-mono">
+                Bo{tournament.best_of} — {completedCount}/{totalPlayableCount} matches
+              </p>
+            </div>
           </div>
           {tournament.status === "active" && (
-            <span className="flex items-center gap-1.5 text-xs font-mono text-accent-orange font-bold">
-              <span className="w-2 h-2 rounded-full bg-accent-orange live-pulse" />
+            <span className="flex items-center gap-1.5 text-xs font-mono text-green-400 font-bold">
+              <span className="w-2 h-2 rounded-full bg-green-400 live-pulse" />
               LIVE
             </span>
           )}
