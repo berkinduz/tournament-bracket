@@ -129,16 +129,17 @@ export default function BracketView({ matches, totalRounds: numRounds, playerCou
   const colX = (r: number) => r * (COL_W + COL_GAP);
 
   // Bye explanation
-  const singleByeCount = rounds[0]?.filter(m => m.is_bye && (m.player1_id || m.player2_id)).length ?? 0;
+  const byeCount = rounds[0]?.filter(m => m.is_bye).length ?? 0;
   const realR0 = rounds[0]?.filter(m => !m.is_bye).length ?? 0;
+  const bracketSize = (rounds[0]?.length ?? 0) * 2;
 
   return (
     <div className="overflow-auto">
       {/* Explanation line */}
-      {playerCount && playerCount > 0 && (
+      {byeCount > 0 && playerCount && (
         <div className="px-5 pt-4 pb-1">
           <p className="text-[12px] text-[var(--text-muted)]">
-            {playerCount} players — {realR0} matches in Round 1{singleByeCount > 0 ? `, ${singleByeCount} bye` : ""}
+            {playerCount} players — {realR0} play in Round 1, {byeCount} advance directly to Round 2 (bracket size: {bracketSize})
           </p>
         </div>
       )}

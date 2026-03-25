@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import type { Player } from "@/lib/types";
-import { calcRealMatchCount } from "@/lib/bracket";
+import { nextPowerOf2, calcRealMatchCount } from "@/lib/bracket";
 
 interface ManualPairingProps {
   players: Player[];
@@ -11,7 +11,8 @@ interface ManualPairingProps {
 
 export default function ManualPairing({ players, onPairingsChange }: ManualPairingProps) {
   const realMatchCount = calcRealMatchCount(players.length);
-  const numByes = players.length % 2; // 0 or 1 with accumulated byes
+  const bracketSize = nextPowerOf2(players.length);
+  const numByes = bracketSize - players.length;
 
   const [slots, setSlots] = useState<Array<[string | null, string | null]>>(
     () => Array.from({ length: realMatchCount }, () => [null, null])
@@ -157,7 +158,7 @@ export default function ManualPairing({ players, onPairingsChange }: ManualPairi
       {numByes > 0 && unassigned.length > 0 && (
         <div>
           <h4 className="text-xs font-semibold text-text-secondary mb-2">
-            Automatic Bye ({unassigned.length})
+            Automatic Byes ({unassigned.length})
           </h4>
           <div className="flex flex-wrap gap-1.5">
             {unassigned.map((p) => (
@@ -170,7 +171,7 @@ export default function ManualPairing({ players, onPairingsChange }: ManualPairi
             ))}
           </div>
           <p className="text-[10px] text-text-muted mt-1">
-            This player advances directly to Round 2.
+            These players advance directly to Round 2.
           </p>
         </div>
       )}
