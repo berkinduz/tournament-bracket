@@ -78,6 +78,48 @@ async function cascadeByeAdvance(
   }
 }
 
+async function clearDownstreamFromMatch(
+  supabase: ReturnType<typeof createServiceClient>,
+  tournamentId: string,
+  match: { round: number; position: number },
+  numRounds: number,
+) {
+  const downstream = getDownstreamMatches(match.round, match.position, numRounds);
+
+  for (const dm of downstream) {
+    const { data: dmMatch } = await supabase
+      .from("matches")
+      .select("*")
+      .eq("tournament_id", tournamentId)
+      .eq("round", dm.round)
+      .eq("position", dm.position)
+      .single();
+
+    if (!dmMatch) continue;
+
+    const feedP1From = { round: dm.round - 1, position: dm.position * 2 };
+    const feedP2From = { round: dm.round - 1, position: dm.position * 2 + 1 };
+
+    const isF1Affected =
+      (feedP1From.round === match.round && feedP1From.position === match.position) ||
+      downstream.some((d) => d.round === feedP1From.round && d.position === feedP1From.position);
+    const isF2Affected =
+      (feedP2From.round === match.round && feedP2From.position === match.position) ||
+      downstream.some((d) => d.round === feedP2From.round && d.position === feedP2From.position);
+
+    const update: Record<string, unknown> = {
+      player1_score: null,
+      player2_score: null,
+      winner_id: null,
+      status: "pending",
+    };
+    if (isF1Affected) update.player1_id = null;
+    if (isF2Affected) update.player2_id = null;
+
+    await supabase.from("matches").update(update).eq("id", dmMatch.id);
+  }
+}
+
 // POST — set match result
 export async function POST(
   request: NextRequest,
@@ -132,6 +174,15 @@ export async function POST(
     .select("id")
     .eq("tournament_id", id);
   const numRounds = calcTotalRounds(allPlayers?.length || 0);
+
+  if (match.status === "completed") {
+    await clearDownstreamFromMatch(supabase, id, match, numRounds);
+    await supabase
+      .from("tournaments")
+      .update({ status: "active", champion: null })
+      .eq("id", id)
+      .eq("status", "completed");
+  }
 
   // Update match
   await supabase
@@ -201,13 +252,15 @@ export async function DELETE(
     .single();
   if (mErr || !match) return NextResponse.json({ error: "Match not found" }, { status: 404 });
 
+  if (match.tournament_id !== id) {
+    return NextResponse.json({ error: "Match does not belong to this tournament" }, { status: 400 });
+  }
+
   const { data: allPlayers } = await supabase
     .from("players")
     .select("id")
     .eq("tournament_id", id);
   const numRounds = calcTotalRounds(allPlayers?.length || 0);
-
-  const downstream = getDownstreamMatches(match.round, match.position, numRounds);
 
   // Clear current match
   await supabase
@@ -216,38 +269,7 @@ export async function DELETE(
     .eq("id", matchId);
 
   // Clear all downstream matches (including cascaded byes)
-  for (const dm of downstream) {
-    const { data: dmMatch } = await supabase
-      .from("matches")
-      .select("*")
-      .eq("tournament_id", id)
-      .eq("round", dm.round)
-      .eq("position", dm.position)
-      .single();
-
-    if (dmMatch) {
-      const feedP1From = { round: dm.round - 1, position: dm.position * 2 };
-      const feedP2From = { round: dm.round - 1, position: dm.position * 2 + 1 };
-
-      const isF1Affected =
-        (feedP1From.round === match.round && feedP1From.position === match.position) ||
-        downstream.some((d) => d.round === feedP1From.round && d.position === feedP1From.position);
-      const isF2Affected =
-        (feedP2From.round === match.round && feedP2From.position === match.position) ||
-        downstream.some((d) => d.round === feedP2From.round && d.position === feedP2From.position);
-
-      const update: Record<string, unknown> = {
-        player1_score: null,
-        player2_score: null,
-        winner_id: null,
-        status: dmMatch.is_bye ? "pending" : "pending",
-      };
-      if (isF1Affected) update.player1_id = null;
-      if (isF2Affected) update.player2_id = null;
-
-      await supabase.from("matches").update(update).eq("id", dmMatch.id);
-    }
-  }
+  await clearDownstreamFromMatch(supabase, id, match, numRounds);
 
   // Revert tournament if completed
   await supabase

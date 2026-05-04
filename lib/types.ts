@@ -1,4 +1,4 @@
-export type SportType = "ping-pong" | "foosball" | "chess" | "other";
+export type SportType = "ping-pong" | "backgammon";
 
 export interface Tournament {
   id: string;
@@ -7,14 +7,24 @@ export interface Tournament {
   best_of: 3 | 5;
   status: "setup" | "active" | "completed";
   champion: string | null;
-  sport_type?: SportType;
+  sport_type: SportType;
 }
+
+export const SPORT_LABELS: Record<SportType, string> = {
+  "ping-pong": "Ping Pong",
+  backgammon: "Backgammon",
+};
+
+export const SPORT_ICONS: Record<SportType, string> = {
+  "ping-pong": "🏓",
+  backgammon: "🎲",
+};
+
 
 export interface Player {
   id: string;
   tournament_id: string;
   name: string;
-  seed: number | null;
   created_at: string;
 }
 

@@ -12,7 +12,6 @@ export async function GET(
     .from("players")
     .select("*")
     .eq("tournament_id", id)
-    .order("seed", { ascending: true, nullsFirst: false })
     .order("created_at", { ascending: true });
 
   if (error) {
@@ -44,7 +43,6 @@ export async function POST(
     .map((name: string) => ({
       tournament_id: id,
       name,
-      seed: null,
     }));
 
   const supabase = createServiceClient();
@@ -88,29 +86,25 @@ export async function DELETE(
   return NextResponse.json({ success: true });
 }
 
-// PATCH /api/tournaments/[id]/players — update seeds and/or names
+// PATCH /api/tournaments/[id]/players — rename players
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  await params; // consume params
+  const { id } = await params;
   const body = await request.json() as {
-    updates: Array<{ id: string; seed?: number | null; name?: string }>;
+    updates: Array<{ id: string; name?: string }>;
   };
 
   const supabase = createServiceClient();
 
   for (const update of body.updates) {
-    const fields: Record<string, unknown> = {};
-    if ("seed" in update) fields.seed = update.seed;
-    if ("name" in update && update.name) fields.name = update.name;
-
-    if (Object.keys(fields).length === 0) continue;
-
+    if (!update.name?.trim()) continue;
     const { error } = await supabase
       .from("players")
-      .update(fields)
-      .eq("id", update.id);
+      .update({ name: update.name.trim() })
+      .eq("id", update.id)
+      .eq("tournament_id", id);
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });

@@ -83,7 +83,7 @@ export default function PublicBracketPage({
             <div>
               <h1 className="text-sm font-semibold text-white">{tournament.name}</h1>
               <p className="text-[10px] text-gray-400 font-mono">
-                Bo{tournament.best_of} — {completedCount}/{totalPlayableCount} matches
+                {tournament.sport_type === "backgammon" ? "🎲 Backgammon" : `Bo${tournament.best_of}`} — {completedCount}/{totalPlayableCount} matches
               </p>
             </div>
           </div>

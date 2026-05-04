@@ -2,19 +2,23 @@
 
 import { useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import type { MatchWithPlayers, BestOf } from "@/lib/types";
+import type { MatchWithPlayers, BestOf, SportType } from "@/lib/types";
 import { adminFetch } from "@/lib/admin-fetch";
 
 interface ScoreModalProps {
   match: MatchWithPlayers;
   tournamentId: string;
   bestOf: BestOf;
+  sportType: SportType;
   onClose: () => void;
   onSaved: () => void;
 }
 
-export default function ScoreModal({ match, tournamentId, bestOf, onClose, onSaved }: ScoreModalProps) {
-  const maxScore = Math.ceil(bestOf / 2); // 2 for Bo3, 3 for Bo5
+export default function ScoreModal({ match, tournamentId, bestOf, sportType, onClose, onSaved }: ScoreModalProps) {
+  const isBackgammon = sportType === "backgammon";
+  // Ping pong: capped at games-to-win (best-of-N → ceil(N/2)).
+  // Backgammon: free-form — organizer wants any score in, winner advances.
+  const maxScore = isBackgammon ? 99 : Math.ceil(bestOf / 2);
   const [p1Score, setP1Score] = useState<number>(match.player1_score ?? 0);
   const [p2Score, setP2Score] = useState<number>(match.player2_score ?? 0);
   const [saving, setSaving] = useState(false);
@@ -139,7 +143,9 @@ export default function ScoreModal({ match, tournamentId, bestOf, onClose, onSav
           className="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden"
         >
           <div className="px-5 pt-5 pb-3 text-center">
-            <p className="text-xs text-text-muted font-mono">Enter Score</p>
+            <p className="text-xs text-text-muted font-mono">
+              {isBackgammon ? "Enter match score — higher score advances" : "Enter Score"}
+            </p>
           </div>
 
           <div className="px-5 pb-4 flex gap-3">

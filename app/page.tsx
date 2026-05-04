@@ -6,8 +6,10 @@ import PlayerManager from "@/app/components/PlayerManager";
 import ManualPairing from "@/app/components/ManualPairing";
 import ScoreModal from "@/app/components/ScoreModal";
 import BracketView from "@/app/components/BracketView";
+import RenamePlayersModal from "@/app/components/RenamePlayersModal";
 import { QRCodeSVG } from "qrcode.react";
-import type { Tournament, Player, Match, MatchWithPlayers, BestOf } from "@/lib/types";
+import type { Tournament, Player, Match, MatchWithPlayers, BestOf, SportType } from "@/lib/types";
+import { SPORT_ICONS, SPORT_LABELS } from "@/lib/types";
 import { calcTotalRounds } from "@/lib/bracket";
 
 interface TournamentWithCount extends Tournament {
@@ -20,6 +22,7 @@ export default function HomePage() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [matches, setMatches] = useState<Match[]>([]);
   const [scoreMatch, setScoreMatch] = useState<MatchWithPlayers | null>(null);
+  const [showRename, setShowRename] = useState(false);
   const [loading, setLoading] = useState(false);
 
   // Admin auth
@@ -30,6 +33,7 @@ export default function HomePage() {
 
   // New tournament
   const [newName, setNewName] = useState("");
+  const [newSport, setNewSport] = useState<SportType>("ping-pong");
   const [showCreate, setShowCreate] = useState(false);
   const [bracketMode, setBracketMode] = useState<"auto" | "manual">("auto");
   const [manualPairings, setManualPairings] = useState<[string, string][] | null>(null);
@@ -65,19 +69,19 @@ export default function HomePage() {
   const loadTournaments = useCallback(async () => {
     const res = await fetch("/api/tournaments");
     const data = await res.json();
-    setTournaments(data);
+    setTournaments(Array.isArray(data) ? data : []);
   }, []);
 
   const loadPlayers = useCallback(async (tId: string) => {
     const res = await fetch(`/api/tournaments/${tId}/players`);
     const data = await res.json();
-    setPlayers(data);
+    setPlayers(Array.isArray(data) ? data : []);
   }, []);
 
   const loadMatches = useCallback(async (tId: string) => {
     const res = await fetch(`/api/tournaments/${tId}/matches`);
     const data = await res.json();
-    setMatches(data);
+    setMatches(Array.isArray(data) ? data : []);
   }, []);
 
   useEffect(() => { loadTournaments(); }, [loadTournaments]);
@@ -106,10 +110,15 @@ export default function HomePage() {
     setLoading(true);
     const res = await adminFetch("/api/tournaments", {
       method: "POST",
-      body: JSON.stringify({ name: newName.trim(), best_of: 3 }),
+      body: JSON.stringify({
+        name: newName.trim(),
+        best_of: newSport === "backgammon" ? 5 : 3,
+        sport_type: newSport,
+      }),
     });
     const data = await res.json();
     setNewName("");
+    setNewSport("ping-pong");
     setShowCreate(false);
     await loadTournaments();
     setSelectedTournament(data);
@@ -307,6 +316,9 @@ export default function HomePage() {
                 >
                   <div className="flex items-center gap-3">
                     <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${statusDot(t.status)}`} />
+                    <span className="text-lg shrink-0" title={SPORT_LABELS[t.sport_type] ?? "Ping Pong"}>
+                      {SPORT_ICONS[t.sport_type] ?? "🏓"}
+                    </span>
                     <div className="flex-1 min-w-0">
                       <h3 className="font-semibold group-hover:text-[var(--accent-orange)] transition-colors truncate">
                         {t.name}
@@ -326,7 +338,7 @@ export default function HomePage() {
             </div>
           ) : (
             <div className="text-center py-16 text-text-muted">
-              <div className="text-4xl mb-3">🏓</div>
+              <div className="text-4xl mb-3">🏆</div>
               <p className="text-lg font-medium text-text-secondary">No tournaments yet</p>
               {isAdmin && <p className="text-sm mt-1">Create your first tournament below</p>}
             </div>
@@ -365,7 +377,20 @@ export default function HomePage() {
                     Create
                   </button>
                 </div>
-                <button onClick={() => { setShowCreate(false); setNewName(""); }}
+                <div className="flex items-center gap-1 p-1 bg-bg-primary rounded-lg w-fit">
+                  {(["ping-pong", "backgammon"] as SportType[]).map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => setNewSport(s)}
+                      className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-1.5
+                        ${newSport === s ? "bg-white shadow-sm text-text-primary" : "text-text-muted hover:text-text-secondary"}`}
+                    >
+                      <span>{SPORT_ICONS[s]}</span>
+                      <span>{SPORT_LABELS[s]}</span>
+                    </button>
+                  ))}
+                </div>
+                <button onClick={() => { setShowCreate(false); setNewName(""); setNewSport("ping-pong"); }}
                   className="text-sm text-text-muted hover:text-text-secondary transition-colors">
                   Cancel
                 </button>
@@ -394,10 +419,15 @@ export default function HomePage() {
                              hover:border-[var(--text-primary)] hover:text-text-primary transition-colors">
                   Reshuffle
                 </button>
+                <button onClick={() => setShowRename(true)}
+                  className="px-3 py-1.5 text-sm text-text-secondary border border-border-subtle rounded-lg
+                             hover:border-[var(--text-primary)] hover:text-text-primary transition-colors">
+                  Rename Players
+                </button>
                 <button onClick={resetBracket}
                   className="px-3 py-1.5 text-sm text-text-secondary border border-border-subtle rounded-lg
                              hover:border-[var(--text-primary)] hover:text-text-primary transition-colors">
-                  Edit Players
+                  Reset Bracket
                 </button>
               </>
             )}
@@ -496,12 +526,23 @@ export default function HomePage() {
         )}
       </div>
 
+      {/* Rename players modal — admin only */}
+      {isAdmin && showRename && selectedTournament && (
+        <RenamePlayersModal
+          tournamentId={selectedTournament.id}
+          players={players}
+          onClose={() => setShowRename(false)}
+          onSaved={() => loadPlayers(selectedTournament.id)}
+        />
+      )}
+
       {/* Score modal — admin only */}
       {isAdmin && scoreMatch && selectedTournament && (
         <ScoreModal
           match={scoreMatch}
           tournamentId={selectedTournament.id}
           bestOf={selectedTournament.best_of as BestOf}
+          sportType={selectedTournament.sport_type ?? "ping-pong"}
           onClose={() => setScoreMatch(null)}
           onSaved={handleScoreSaved}
         />

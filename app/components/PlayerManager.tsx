@@ -1,23 +1,6 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from "@dnd-kit/core";
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import type { Player } from "@/lib/types";
 import { adminFetch } from "@/lib/admin-fetch";
 
@@ -27,7 +10,7 @@ interface PlayerManagerProps {
   onPlayersChange: () => void;
 }
 
-function SortablePlayer({
+function PlayerRow({
   player,
   index,
   onRemove,
@@ -41,20 +24,6 @@ function SortablePlayer({
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState(player.name);
 
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: player.id });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
-
   const saveEdit = () => {
     const trimmed = editName.trim();
     if (trimmed && trimmed !== player.name) {
@@ -66,29 +35,7 @@ function SortablePlayer({
   };
 
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className={`flex items-center gap-2 p-2.5 rounded-lg border transition-all
-        ${isDragging
-          ? "bg-accent-orange/10 border-accent-orange z-50 shadow-lg"
-          : "bg-bg-primary/50 border-border-subtle hover:border-accent-orange/30"
-        }`}
-    >
-      <button
-        {...attributes}
-        {...listeners}
-        className="touch-none cursor-grab active:cursor-grabbing p-1 text-text-muted hover:text-text-secondary"
-      >
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-          <circle cx="5" cy="3" r="1.5" />
-          <circle cx="11" cy="3" r="1.5" />
-          <circle cx="5" cy="8" r="1.5" />
-          <circle cx="11" cy="8" r="1.5" />
-          <circle cx="5" cy="13" r="1.5" />
-          <circle cx="11" cy="13" r="1.5" />
-        </svg>
-      </button>
+    <div className="flex items-center gap-2 p-2.5 rounded-lg border bg-bg-primary/50 border-border-subtle hover:border-accent-orange/30 transition-colors">
       <span className="text-accent-orange font-mono text-xs font-bold min-w-[1.5rem]">
         #{index + 1}
       </span>
@@ -117,11 +64,6 @@ function SortablePlayer({
         </span>
       )}
 
-      {player.seed !== null && (
-        <span className="px-1.5 py-0.5 bg-accent-gold/20 text-accent-gold text-[10px] font-mono rounded">
-          S{player.seed}
-        </span>
-      )}
       <button
         onClick={() => onRemove(player.id)}
         className="p-1 text-text-muted hover:text-red-400 hover:bg-red-400/10 rounded transition-colors"
@@ -140,45 +82,26 @@ export default function PlayerManager({
   onPlayersChange,
 }: PlayerManagerProps) {
   const [nameInput, setNameInput] = useState("");
-  const [bulkInput, setBulkInput] = useState("");
-  const [showBulk, setShowBulk] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  );
-
-  const addPlayer = useCallback(async () => {
-    if (!nameInput.trim()) return;
-    setLoading(true);
-    await adminFetch(`/api/tournaments/${tournamentId}/players`, {
-      method: "POST",
-      body: JSON.stringify({ names: [nameInput.trim()] }),
-    });
-    setNameInput("");
-    onPlayersChange();
-    setLoading(false);
-  }, [nameInput, tournamentId, onPlayersChange]);
-
-  const addBulkPlayers = useCallback(async () => {
-    const names = bulkInput
+  const addPlayers = useCallback(async () => {
+    const names = nameInput
       .split(/[,\n]/)
       .map((n) => n.trim())
       .filter((n) => n.length > 0);
     if (names.length === 0) return;
     setLoading(true);
-    await adminFetch(`/api/tournaments/${tournamentId}/players`, {
-      method: "POST",
-      body: JSON.stringify({ names }),
-    });
-    setBulkInput("");
-    setShowBulk(false);
-    onPlayersChange();
-    setLoading(false);
-  }, [bulkInput, tournamentId, onPlayersChange]);
+    try {
+      await adminFetch(`/api/tournaments/${tournamentId}/players`, {
+        method: "POST",
+        body: JSON.stringify({ names }),
+      });
+      setNameInput("");
+      onPlayersChange();
+    } finally {
+      setLoading(false);
+    }
+  }, [nameInput, tournamentId, onPlayersChange]);
 
   const removePlayer = useCallback(
     async (playerId: string) => {
@@ -202,90 +125,24 @@ export default function PlayerManager({
     [tournamentId, onPlayersChange]
   );
 
-  const handleDragEnd = useCallback(
-    async (event: DragEndEvent) => {
-      const { active, over } = event;
-      if (!over || active.id === over.id) return;
-
-      const oldIndex = players.findIndex((p) => p.id === active.id);
-      const newIndex = players.findIndex((p) => p.id === over.id);
-      const reordered = arrayMove(players, oldIndex, newIndex);
-
-      const updates = reordered.map((p, i) => ({
-        id: p.id,
-        seed: i + 1,
-      }));
-
-      await adminFetch(`/api/tournaments/${tournamentId}/players`, {
-        method: "PATCH",
-        body: JSON.stringify({ updates }),
-      });
-      onPlayersChange();
-    },
-    [players, tournamentId, onPlayersChange]
-  );
-
-  const clearSeeds = useCallback(async () => {
-    const updates = players.map((p) => ({ id: p.id, seed: null }));
-    await adminFetch(`/api/tournaments/${tournamentId}/players`, {
-      method: "PATCH",
-      body: JSON.stringify({ updates }),
-    });
-    onPlayersChange();
-  }, [players, tournamentId, onPlayersChange]);
-
-  const seedAll = useCallback(async () => {
-    const updates = players.map((p, i) => ({ id: p.id, seed: i + 1 }));
-    await adminFetch(`/api/tournaments/${tournamentId}/players`, {
-      method: "PATCH",
-      body: JSON.stringify({ updates }),
-    });
-    onPlayersChange();
-  }, [players, tournamentId, onPlayersChange]);
-
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <h2 className="text-base font-semibold text-text-primary">
           Players ({players.length})
         </h2>
-        <button
-          onClick={() => setShowBulk(!showBulk)}
-          className="text-xs text-accent-cyan hover:underline transition-colors"
-        >
-          {showBulk ? "Single add" : "Bulk add"}
-        </button>
       </div>
 
-      {showBulk ? (
-        <div className="space-y-2">
-          <textarea
-            value={bulkInput}
-            onChange={(e) => setBulkInput(e.target.value)}
-            placeholder="Paste names separated by commas or newlines..."
-            className="w-full px-3 py-2.5 bg-bg-primary border border-border-subtle rounded-lg
-                       text-sm text-text-primary placeholder:text-text-muted focus:outline-none
-                       focus:border-accent-orange min-h-[80px] resize-y"
-          />
-          <button
-            onClick={addBulkPlayers}
-            disabled={loading || !bulkInput.trim()}
-            className="w-full py-2.5 bg-accent-orange text-white font-semibold rounded-lg text-sm
-                       hover:bg-orange-500 disabled:opacity-50 transition-colors"
-          >
-            Add Players
-          </button>
-        </div>
-      ) : (
-        <form
-          onSubmit={(e) => { e.preventDefault(); addPlayer(); }}
-          className="flex gap-2"
-        >
+      <form
+        onSubmit={(e) => { e.preventDefault(); addPlayers(); }}
+        className="space-y-1.5"
+      >
+        <div className="flex gap-2">
           <input
             type="text"
             value={nameInput}
             onChange={(e) => setNameInput(e.target.value)}
-            placeholder="Player name"
+            placeholder="Player name, or comma-separated names"
             className="flex-1 px-3 py-2.5 bg-bg-primary border border-border-subtle rounded-lg text-sm
                        text-text-primary placeholder:text-text-muted focus:outline-none
                        focus:border-accent-orange"
@@ -298,54 +155,26 @@ export default function PlayerManager({
           >
             Add
           </button>
-        </form>
-      )}
+        </div>
+        <p className="text-[10px] text-text-muted">
+          Enter one name, or separate multiple players with commas.
+        </p>
+      </form>
 
       {players.length > 0 && (
         <>
-          <div className="flex gap-2">
-            <button
-              onClick={seedAll}
-              className="flex-1 py-2 text-xs border border-accent-cyan/30 text-accent-cyan
-                         rounded-lg hover:bg-accent-cyan/10 transition-colors"
-            >
-              Seed All
-            </button>
-            <button
-              onClick={clearSeeds}
-              className="flex-1 py-2 text-xs border border-border-subtle text-text-secondary
-                         rounded-lg hover:bg-white/5 transition-colors"
-            >
-              Clear Seeds
-            </button>
+          <p className="text-[10px] text-text-muted">Click name to edit.</p>
+          <div className="space-y-1 max-h-[350px] overflow-y-auto pr-1">
+            {players.map((player, index) => (
+              <PlayerRow
+                key={player.id}
+                player={player}
+                index={index}
+                onRemove={removePlayer}
+                onRename={renamePlayer}
+              />
+            ))}
           </div>
-
-          <p className="text-[10px] text-text-muted">
-            Drag to reorder. Click name to edit.
-          </p>
-
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragEnd={handleDragEnd}
-          >
-            <SortableContext
-              items={players.map((p) => p.id)}
-              strategy={verticalListSortingStrategy}
-            >
-              <div className="space-y-1 max-h-[350px] overflow-y-auto pr-1">
-                {players.map((player, index) => (
-                  <SortablePlayer
-                    key={player.id}
-                    player={player}
-                    index={index}
-                    onRemove={removePlayer}
-                    onRename={renamePlayer}
-                  />
-                ))}
-              </div>
-            </SortableContext>
-          </DndContext>
         </>
       )}
     </div>

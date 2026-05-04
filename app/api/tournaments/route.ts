@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
-import type { BestOf } from "@/lib/types";
+import type { BestOf, SportType } from "@/lib/types";
 
 // GET /api/tournaments — list all tournaments
 export async function GET() {
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
   const body = await request.json() as {
     name: string;
     best_of: BestOf;
-    sport_type?: string;
+    sport_type?: SportType;
   };
 
   if (!body.name?.trim()) {
@@ -41,15 +41,15 @@ export async function POST(request: NextRequest) {
       { status: 400 }
     );
   }
+  const sportType: SportType =
+    body.sport_type === "backgammon" ? "backgammon" : "ping-pong";
 
   const insertData: Record<string, unknown> = {
     name: body.name.trim(),
     best_of: body.best_of,
+    sport_type: sportType,
     status: "setup",
   };
-  if (body.sport_type) {
-    insertData.sport_type = body.sport_type;
-  }
 
   const supabase = createServiceClient();
   const { data, error } = await supabase
